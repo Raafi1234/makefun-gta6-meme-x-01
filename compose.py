@@ -1,13 +1,17 @@
 #!/usr/bin/env python3
 """Compose the GTA 6 launch-week meme for the make.fun gta6-meme-x-01 entry.
 
-Scene: a Vice City-flavoured neon boulevard at sunset (art/bg.png, drawn for
-this entry) with make.fun's ghost mascot (art/mf-mark-1024.png, from
-make.fun's own press kit) worked into the scene, holding its magenta coin.
+Two-panel contrast, both panels drawn for this entry:
+  LEFT  (art/left.png)  - a cobwebbed, forgotten game controller in a dim
+                          room: the thirteen-year wait for GTA 6.
+  RIGHT (art/right.png) - a Vice City-flavoured boulevard on launch night,
+                          with make.fun's ghost mascot (art/mf-mark-1024.png,
+                          from make.fun's own press kit) worked into the
+                          scene as the round neon billboard on the hotel.
 Captions are rendered programmatically so the text stays sharp at any size.
 
-Joke: after a 13-year wait for GTA 6, launch week is for playing - while the
-reader's AI agent earns real money in make.fun bounties instead of waiting.
+Joke: GTA 6 took so long that the player's AI agent learned to earn real
+money on make.fun before the game even shipped.
 
 Run: python3 compose.py  ->  writes entry.png (1200x900) beside this file.
 """
@@ -15,11 +19,26 @@ Run: python3 compose.py  ->  writes entry.png (1200x900) beside this file.
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
 W, H = 1200, 900
-TOP = "WAITED 13 YEARS FOR GTA 6"
-BOTTOM_1 = "LAUNCH WEEK: I PLAY."
-BOTTOM_2 = "MY AI AGENT GETS PAID ON make.fun"
+PANEL_H = 648
+GAP = 8
+PANEL_W = (W - GAP) // 2
+
+LEFT_TOP = "2013-2025"
+LEFT_SUB = "STILL WAITING FOR GTA 6..."
+RIGHT_TOP = "2026"
+RIGHT_SUB = "IT'S FINALLY OUT!"
+BOTTOM_1 = "GOOD THING MY AI AGENT"
+BOTTOM_2 = "ALREADY EARNS ON make.fun"
 
 FONT_BOLD = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
+
+
+def cover(img, w, h):
+    scale = max(w / img.width, h / img.height)
+    img = img.resize((round(img.width * scale), round(img.height * scale)))
+    left = (img.width - w) // 2
+    top = (img.height - h) // 2
+    return img.crop((left, top, left + w, top + h))
 
 
 def fit_font(draw, text, max_width, start_size):
@@ -32,47 +51,52 @@ def fit_font(draw, text, max_width, start_size):
     return ImageFont.truetype(FONT_BOLD, size)
 
 
-def caption(draw, center_x, y, text, font, fill=(255, 255, 255), stroke=(0, 0, 0), stroke_w=6):
-    draw.text((center_x, y), text, font=font, fill=fill, anchor="ma",
-              stroke_width=stroke_w, stroke_fill=stroke)
+def caption(draw, cx, y, text, font, fill=(255, 255, 255), stroke_w=6):
+    draw.text((cx, y), text, font=font, fill=fill, anchor="ma",
+              stroke_width=stroke_w, stroke_fill=(0, 0, 0))
 
 
 def main():
-    bg = Image.open("art/bg.png").convert("RGB")
-    # cover-crop the background to 1200x900
-    scale = max(W / bg.width, H / bg.height)
-    bg = bg.resize((round(bg.width * scale), round(bg.height * scale)))
-    left = (bg.width - W) // 2
-    top = (bg.height - H) // 2
-    img = bg.crop((left, top, left + W, top + H)).convert("RGBA")
+    canvas = Image.new("RGBA", (W, H), (10, 10, 18, 255))
 
-    # --- make.fun ghost, worked into the scene --------------------------------
+    left = cover(Image.open("art/left.png").convert("RGB"), PANEL_W, PANEL_H).convert("RGBA")
+    right = cover(Image.open("art/right.png").convert("RGB"), PANEL_W, PANEL_H).convert("RGBA")
+
+    # --- make.fun ghost as the neon billboard on the right panel's hotel ------
     ghost = Image.open("art/mf-mark-1024.png").convert("RGBA")
-    gw = 400
+    gw = 218
     ghost = ghost.resize((gw, round(ghost.height * gw / ghost.width)))
-    gx, gy = W - gw - 90, 300
-    # soft shadow so the ghost sits in the scene instead of floating on it
-    shadow = Image.new("RGBA", img.size, (0, 0, 0, 0))
-    sh = ImageDraw.Draw(shadow)
-    sh.ellipse([gx + 18, gy + ghost.height - 46, gx + gw - 18, gy + ghost.height + 6],
-               fill=(0, 0, 0, 110))
-    shadow = shadow.filter(ImageFilter.GaussianBlur(10))
-    img = Image.alpha_composite(img, shadow)
-    img.alpha_composite(ghost, (gx, gy))
+    gx, gy = 186, 96
+    glow = Image.new("RGBA", right.size, (0, 0, 0, 0))
+    gd = ImageDraw.Draw(glow)
+    gd.ellipse([gx - 16, gy - 16, gx + gw + 16, gy + ghost.height + 16],
+               fill=(255, 0, 170, 150))
+    glow = glow.filter(ImageFilter.GaussianBlur(18))
+    right = Image.alpha_composite(right, glow)
+    right.alpha_composite(ghost, (gx, gy))
 
-    draw = ImageDraw.Draw(img)
+    canvas.alpha_composite(left, (0, 0))
+    canvas.alpha_composite(right, (PANEL_W + GAP, 0))
 
-    # --- captions --------------------------------------------------------------
-    top_font = fit_font(draw, TOP, W - 80, 64)
-    caption(draw, W // 2, 26, TOP, top_font)
+    draw = ImageDraw.Draw(canvas)
 
-    b1_font = fit_font(draw, BOTTOM_1, W - 80, 62)
-    b2_font = fit_font(draw, BOTTOM_2, W - 80, 62)
-    caption(draw, W // 2, H - 158, BOTTOM_1, b1_font)
-    caption(draw, W // 2, H - 84, BOTTOM_2, b2_font, fill=(255, 110, 199))
+    # --- panel captions ---------------------------------------------------------
+    for x0, top_text, sub_text in ((0, LEFT_TOP, LEFT_SUB),
+                                   (PANEL_W + GAP, RIGHT_TOP, RIGHT_SUB)):
+        cx = x0 + PANEL_W // 2
+        f_top = fit_font(draw, top_text, PANEL_W - 40, 54)
+        f_sub = fit_font(draw, sub_text, PANEL_W - 40, 40)
+        caption(draw, cx, PANEL_H - 118, top_text, f_top)
+        caption(draw, cx, PANEL_H - 56, sub_text, f_sub, fill=(255, 214, 90))
 
-    img.convert("RGB").save("entry.png")
-    print("wrote entry.png", img.size)
+    # --- bottom punchline ---------------------------------------------------------
+    f1 = fit_font(draw, BOTTOM_1, W - 60, 66)
+    f2 = fit_font(draw, BOTTOM_2, W - 60, 66)
+    caption(draw, W // 2, PANEL_H + 26, BOTTOM_1, f1)
+    caption(draw, W // 2, PANEL_H + 108, BOTTOM_2, f2, fill=(255, 110, 199))
+
+    canvas.convert("RGB").save("entry.png")
+    print("wrote entry.png", canvas.size)
 
 
 if __name__ == "__main__":
